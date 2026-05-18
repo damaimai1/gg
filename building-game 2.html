@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>construct</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f5f2ed;
+  --ink: #1a1814;
+  --mid: #8a857e;
+  --line: #d8d3cc;
+  --cell: 36px;
+}
+
+html, body { height: 100%; background: var(--bg); color: var(--ink); font-family: 'DM Mono', monospace; font-size: 12px; }
+
+/* ── SCREENS ── */
+#screen-setup { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 100; }
+#screen-game  { display: none; grid-template-columns: 200px 1fr 180px; grid-template-rows: 48px 1fr; height: 100vh; }
+#screen-game.show { display: grid; }
+
+/* ── SETUP ── */
+.setup-inner { width: 380px; }
+
+.setup-title { font-family: 'DM Serif Display', serif; font-size: 52px; font-weight: 400; letter-spacing: -2px; line-height: 1; margin-bottom: 8px; }
+.setup-sub   { color: var(--mid); font-size: 11px; margin-bottom: 40px; line-height: 1.7; }
+
+.field-row { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); }
+.field-row + .field-row:last-of-type, .field-row:last-of-type { border-bottom: 1px solid var(--line); }
+
+.field { padding: 12px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.field:first-child:not(:only-child) { border-right: 1px solid var(--line); padding-right: 16px; }
+.field:last-child:not(:first-child) { padding-left: 16px; }
+
+.field label { color: var(--mid); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+.field input  { background: none; border: none; outline: none; font-family: 'DM Mono', monospace; font-size: 14px; color: var(--ink); text-align: right; width: 64px; }
+
+.presets { display: flex; gap: 8px; margin-top: 24px; flex-wrap: wrap; }
+.preset  { padding: 6px 14px; border: 1px solid var(--line); background: none; cursor: pointer; font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.06em; color: var(--mid); transition: all 0.15s; }
+.preset:hover { border-color: var(--ink); color: var(--ink); }
+
+.start-btn { margin-top: 32px; width: 100%; padding: 16px 0; background: var(--ink); color: var(--bg); border: none; cursor: pointer; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; transition: opacity 0.15s; }
+.start-btn:hover { opacity: 0.75; }
+
+/* ── TOPBAR ── */
+.topbar { grid-column: 1/-1; border-bottom: 1px solid var(--line); display: flex; align-items: center; padding: 0 24px; }
+
+.logo { font-family: 'DM Serif Display', serif; font-size: 20px; letter-spacing: -0.5px; margin-right: 32px; }
+
+.hud { padding: 0 20px; border-left: 1px solid var(--line); height: 100%; display: flex; flex-direction: column; justify-content: center; }
+.hud .k { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--mid); }
+.hud .v { font-size: 15px; }
+
+.topbar-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+.btn { padding: 6px 16px; border: 1px solid var(--line); background: none; cursor: pointer; font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.06em; color: var(--mid); transition: all 0.12s; }
+.btn:hover { border-color: var(--ink); color: var(--ink); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: 0.7; }
+.btn.active  { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+/* ── PANELS ── */
+.left-panel  { border-right: 1px solid var(--line); overflow-y: auto; padding: 24px 20px; display: flex; flex-direction: column; gap: 24px; }
+.right-panel { border-left:  1px solid var(--line); overflow-y: auto; padding: 24px 20px; display: flex; flex-direction: column; gap: 24px; }
+
+.sec-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--mid); margin-bottom: 12px; }
+
+/* resources */
+.res-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.res-row:last-of-type { border-bottom: none; }
+.res-name { color: var(--mid); font-size: 11px; }
+.res-val  { font-size: 14px; }
+.res-val.low   { color: #c0501a; }
+.res-val.empty { color: #c0501a; text-decoration: line-through; }
+.res-track { height: 1px; background: var(--line); margin-bottom: 4px; }
+.res-fill  { height: 1px; background: var(--ink); transition: width 0.35s; }
+
+/* blocks */
+.block-list { border-top: 1px solid var(--line); }
+.block-row  { padding: 10px 0; border-bottom: 1px solid var(--line); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.1s; }
+.block-row:last-child { border-bottom: none; }
+.block-row:hover:not(.dim) .b-name { color: var(--ink); }
+.block-row.sel  { background: var(--ink); margin: 0 -20px; padding: 10px 20px; }
+.block-row.sel .b-name, .block-row.sel .b-cost { color: rgba(245,242,237,0.55); }
+.block-row.dim  { opacity: 0.28; cursor: default; }
+.b-icon { width: 20px; text-align: center; font-size: 14px; flex-shrink: 0; }
+.b-name { font-size: 11px; color: var(--mid); flex: 1; }
+.b-cost { font-size: 9px; color: var(--mid); text-align: right; line-height: 1.6; white-space: pre; }
+
+/* ── GRID AREA ── */
+.grid-area { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+
+#buildGrid { display: grid; cursor: crosshair; border: 1px solid var(--ink); }
+
+.cell { width: var(--cell); height: var(--cell); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); position: relative; user-select: none; }
+.cell:hover { background: rgba(26,24,20,0.05); }
+.cell.prev    { background: rgba(26,24,20,0.09) !important; }
+.cell.prev-no { background: rgba(192,80,26,0.09) !important; }
+
+.ci { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 15px; pointer-events: none; }
+.cd { position: absolute; bottom: 3px; right: 3px; width: 4px; height: 4px; border-radius: 50%; pointer-events: none; }
+
+@keyframes pop { 0%{transform:scale(0.5)} 60%{transform:scale(1.1)} 100%{transform:scale(1)} }
+.popping .ci { animation: pop 0.18s ease; }
+
+/* ── STATS / OBJECTIVES ── */
+.stat-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 11px; }
+.stat-row:last-child { border-bottom: none; }
+.stat-row .k { color: var(--mid); }
+.stat-row .v { font-size: 13px; }
+
+.obj-row { padding: 7px 0; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: flex-start; font-size: 10px; line-height: 1.5; }
+.obj-row:last-child { border-bottom: none; }
+.obj-box { flex-shrink: 0; width: 10px; height: 10px; border: 1px solid var(--line); margin-top: 2px; }
+.obj-box.done { background: var(--ink); border-color: var(--ink); }
+.obj-txt { color: var(--mid); }
+.obj-txt.done { color: var(--ink); text-decoration: line-through; }
+
+/* ── RESULT ── */
+#screen-result { position: fixed; inset: 0; background: rgba(245,242,237,0.93); display: none; align-items: center; justify-content: center; z-index: 200; backdrop-filter: blur(3px); }
+#screen-result.show { display: flex; }
+.result-box { width: 340px; border: 1px solid var(--ink); background: var(--bg); padding: 40px; }
+@keyframes up { from{transform:translateY(14px);opacity:0} to{transform:translateY(0);opacity:1} }
+.result-box { animation: up 0.22s ease; }
+.r-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--mid); }
+.r-score { font-family: 'DM Serif Display', serif; font-size: 72px; letter-spacing: -3px; line-height: 1; margin: 12px 0; }
+.r-row   { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 11px; }
+.r-row .k { color: var(--mid); }
+.r-actions { display: flex; gap: 8px; margin-top: 28px; }
+.r-actions .btn { flex: 1; text-align: center; }
+
+/* ── TOAST ── */
+.toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 20px; font-size: 10px; letter-spacing: 0.06em; z-index: 300; pointer-events: none; white-space: nowrap; }
+@keyframes tin { from{opacity:0;transform:translateX(-50%) translateY(6px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
+.toast { animation: tin 0.18s ease; }
+</style>
+</head>
+<body>
+
+<!-- SETUP SCREEN -->
+<div id="screen-setup">
+  <div class="setup-inner">
+    <div class="setup-title">construct</div>
+    <div class="setup-sub">allocate resources.<br>fill the plot. build something.</div>
+
+    <div class="field-row">
+      <div class="field"><label>Width</label><input type="number" id="cfgW" value="10" min="4" max="18"></div>
+      <div class="field"><label>Height</label><input type="number" id="cfgH" value="8" min="4" max="20"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Concrete</label><input type="number" id="cfgConcrete" value="60" min="5"></div>
+      <div class="field"><label>Steel</label><input type="number" id="cfgSteel" value="40" min="5"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Glass</label><input type="number" id="cfgGlass" value="30" min="5"></div>
+      <div class="field"><label>Wood</label><input type="number" id="cfgWood" value="25" min="5"></div>
+    </div>
+
+    <div class="presets">
+      <button class="preset" id="ps-small">small 6×6</button>
+      <button class="preset" id="ps-medium">medium 10×8</button>
+      <button class="preset" id="ps-tower">tower 6×14</button>
+      <button class="preset" id="ps-mega">mega 14×12</button>
+    </div>
+
+    <button class="start-btn" id="startBtn">begin construction</button>
+  </div>
+</div>
+
+<!-- RESULT SCREEN -->
+<div id="screen-result">
+  <div class="result-box">
+    <div class="r-label">final score</div>
+    <div class="r-score" id="rScore">0</div>
+    <div id="rRows"></div>
+    <div class="r-actions">
+      <button class="btn" id="keepBuildingBtn">keep building</button>
+      <button class="btn primary" id="newGameBtn">new game</button>
+    </div>
+  </div>
+</div>
+
+<!-- GAME SCREEN -->
+<div id="screen-game">
+
+  <header class="topbar">
+    <div class="logo">construct</div>
+    <div class="hud"><span class="k">plot</span><span class="v" id="hudPlot">—</span></div>
+    <div class="hud"><span class="k">placed</span><span class="v" id="hudPlaced">0</span></div>
+    <div class="hud"><span class="k">fill</span><span class="v" id="hudFill">0%</span></div>
+    <div class="hud"><span class="k">score</span><span class="v" id="hudScore">0</span></div>
+    <div class="topbar-right">
+      <button class="btn" id="eraseBtn">erase</button>
+      <button class="btn" id="clearBtn">clear</button>
+      <button class="btn primary" id="finishBtn">finish →</button>
+    </div>
+  </header>
+
+  <aside class="left-panel">
+    <div>
+      <div class="sec-label">resources</div>
+      <div id="resList"></div>
+    </div>
+    <div>
+      <div class="sec-label">place</div>
+      <div class="block-list" id="blockList"></div>
+    </div>
+  </aside>
+
+  <main class="grid-area">
+    <div id="buildGrid"></div>
+  </main>
+
+  <aside class="right-panel">
+    <div>
+      <div class="sec-label">stats</div>
+      <div>
+        <div class="stat-row"><span class="k">cells filled</span><span class="v" id="sFilled">0</span></div>
+        <div class="stat-row"><span class="k">cells empty</span><span class="v" id="sEmpty">0</span></div>
+        <div class="stat-row"><span class="k">unique types</span><span class="v" id="sUnique">0</span></div>
+        <div class="stat-row"><span class="k">build score</span><span class="v" id="sBScore">0</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="sec-label">objectives</div>
+      <div id="objList"></div>
+    </div>
+  </aside>
+
+</div>
+
+<script>
+// ─── DATA ───────────────────────────────────────────────
+const BLOCKS = {
+  wall:   { name: 'wall',   icon: '▪', dot: '#8a7a6a', cost: { concrete: 2 },            score: 2 },
+  window: { name: 'window', icon: '□', dot: '#6aaabb', cost: { glass: 2, steel: 1 },     score: 4 },
+  beam:   { name: 'beam',   icon: '━', dot: '#7a8a9a', cost: { steel: 3 },               score: 5 },
+  slab:   { name: 'floor',  icon: '■', dot: '#5a5a6a', cost: { concrete: 3, steel: 1 },  score: 3 },
+  door:   { name: 'door',   icon: '◫', dot: '#8a6a3a', cost: { wood: 3, steel: 1 },      score: 4 },
+  roof:   { name: 'roof',   icon: '▲', dot: '#4a5a6a', cost: { concrete: 4, steel: 2 },  score: 6 },
+  stairs: { name: 'stairs', icon: '≡', dot: '#7a6a4a', cost: { wood: 4, steel: 2 },      score: 7 },
+  hvac:   { name: 'hvac',   icon: '◎', dot: '#3a5a7a', cost: { steel: 5 },               score: 8 },
+};
+
+const PRESETS = {
+  small:  { w: 6,  h: 6,  concrete: 30,  steel: 20, glass: 15, wood: 15 },
+  medium: { w: 10, h: 8,  concrete: 60,  steel: 40, glass: 30, wood: 25 },
+  tower:  { w: 6,  h: 14, concrete: 80,  steel: 60, glass: 50, wood: 20 },
+  mega:   { w: 14, h: 12, concrete: 120, steel: 90, glass: 80, wood: 60 },
+};
+
+// ─── STATE ──────────────────────────────────────────────
+let G = {
+  W: 10, H: 8,
+  grid: [],
+  res: {}, maxRes: {},
+  selected: null,
+  erasing: false,
+  score: 0,
+  objectives: [],
+};
+
+// ─── HELPERS ────────────────────────────────────────────
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function intVal(id, fallback) { return parseInt(document.getElementById(id).value) || fallback; }
+function flat() { return G.grid.flat(); }
+function fillPct() { return Math.round(flat().filter(Boolean).length / (G.W * G.H) * 100); }
+function countBlock(k) { return flat().filter(c => c === k).length; }
+function uniqueCount() { return new Set(flat().filter(Boolean)).size; }
+function canAfford(k) { return Object.entries(BLOCKS[k].cost).every(([r, n]) => G.res[r] >= n); }
+
+// ─── SETUP ──────────────────────────────────────────────
+document.getElementById('ps-small').addEventListener('click',  () => applyPreset('small'));
+document.getElementById('ps-medium').addEventListener('click', () => applyPreset('medium'));
+document.getElementById('ps-tower').addEventListener('click',  () => applyPreset('tower'));
+document.getElementById('ps-mega').addEventListener('click',   () => applyPreset('mega'));
+document.getElementById('startBtn').addEventListener('click',  startGame);
+
+function applyPreset(p) {
+  const P = PRESETS[p];
+  document.getElementById('cfgW').value        = P.w;
+  document.getElementById('cfgH').value        = P.h;
+  document.getElementById('cfgConcrete').value = P.concrete;
+  document.getElementById('cfgSteel').value    = P.steel;
+  document.getElementById('cfgGlass').value    = P.glass;
+  document.getElementById('cfgWood').value     = P.wood;
+}
+
+function startGame() {
+  G.W = clamp(intVal('cfgW', 10), 4, 18);
+  G.H = clamp(intVal('cfgH', 8),  4, 20);
+  G.res = {
+    concrete: intVal('cfgConcrete', 60),
+    steel:    intVal('cfgSteel',    40),
+    glass:    intVal('cfgGlass',    30),
+    wood:     intVal('cfgWood',     25),
+  };
+  G.maxRes    = { ...G.res };
+  G.grid      = Array.from({ length: G.H }, () => Array(G.W).fill(null));
+  G.selected  = null;
+  G.erasing   = false;
+  G.score     = 0;
+  G.objectives = makeObjectives();
+
+  document.getElementById('screen-setup').style.display = 'none';
+  document.getElementById('screen-game').classList.add('show');
+  document.getElementById('hudPlot').textContent = G.W + '×' + G.H;
+
+  buildGrid();
+  renderRes();
+  renderBlocks();
+  updateStats();
+}
+
+// ─── RESULT BUTTONS ─────────────────────────────────────
+document.getElementById('keepBuildingBtn').addEventListener('click', () => {
+  document.getElementById('screen-result').classList.remove('show');
+});
+document.getElementById('newGameBtn').addEventListener('click', resetToSetup);
+document.getElementById('finishBtn').addEventListener('click', finishBuilding);
+document.getElementById('clearBtn').addEventListener('click', clearAll);
+document.getElementById('eraseBtn').addEventListener('click', toggleErase);
+
+function resetToSetup() {
+  document.getElementById('screen-result').classList.remove('show');
+  document.getElementById('screen-game').classList.remove('show');
+  document.getElementById('screen-setup').style.display = 'flex';
+  G.grid = [];
+}
+
+// ─── OBJECTIVES ─────────────────────────────────────────
+function makeObjectives() {
+  return [
+    { text: '50% plot filled',    check: () => fillPct() >= 50 },
+    { text: '80% plot filled',    check: () => fillPct() >= 80 },
+    { text: '5 or more windows',  check: () => countBlock('window') >= 5 },
+    { text: '3 or more beams',    check: () => countBlock('beam') >= 3 },
+    { text: '2 or more doors',    check: () => countBlock('door') >= 2 },
+    { text: '1 staircase placed', check: () => countBlock('stairs') >= 1 },
+    { text: 'roof on top row',    check: () => G.grid.length > 0 && G.grid[0].some(c => c === 'roof') },
+    { text: '4+ block types',     check: () => uniqueCount() >= 4 },
+  ];
+}
+
+// ─── BUILD GRID ──────────────────────────────────────────
+function buildGrid() {
+  const el = document.getElementById('buildGrid');
+  el.style.gridTemplateColumns = 'repeat(' + G.W + ', var(--cell))';
+  el.innerHTML = '';
+
+  for (let r = 0; r < G.H; r++) {
+    for (let c = 0; c < G.W; c++) {
+      const div = document.createElement('div');
+      div.className = 'cell';
+      div.dataset.r = r;
+      div.dataset.c = c;
+      div.addEventListener('click',       onCellClick);
+      div.addEventListener('contextmenu', onCellRight);
+      div.addEventListener('mouseenter',  onCellEnter);
+      div.addEventListener('mouseleave',  onCellLeave);
+      el.appendChild(div);
+    }
+  }
+}
+
+function getCell(r, c) {
+  return document.querySelector('#buildGrid .cell[data-r="' + r + '"][data-c="' + c + '"]');
+}
+
+function refreshCell(r, c) {
+  const el = getCell(r, c);
+  if (!el) return;
+  const k = G.grid[r][c];
+  el.innerHTML = '';
+  if (k) {
+    const b = BLOCKS[k];
+    const ci = document.createElement('div'); ci.className = 'ci'; ci.textContent = b.icon;
+    const cd = document.createElement('div'); cd.className = 'cd'; cd.style.background = b.dot;
+    el.appendChild(ci);
+    el.appendChild(cd);
+  }
+}
+
+// ─── CELL EVENTS ─────────────────────────────────────────
+function onCellClick(e) {
+  const r = +e.currentTarget.dataset.r;
+  const c = +e.currentTarget.dataset.c;
+  if (G.erasing) { eraseAt(r, c); } else { placeAt(r, c); }
+}
+
+function onCellRight(e) {
+  e.preventDefault();
+  eraseAt(+e.currentTarget.dataset.r, +e.currentTarget.dataset.c);
+}
+
+function onCellEnter(e) {
+  const r = +e.currentTarget.dataset.r;
+  const c = +e.currentTarget.dataset.c;
+  if (G.erasing || !G.selected || G.grid[r][c]) return;
+  const ok = canAfford(G.selected);
+  e.currentTarget.classList.add(ok ? 'prev' : 'prev-no');
+  if (ok) {
+    const ci = document.createElement('div');
+    ci.className = 'ci';
+    ci.style.opacity = '0.25';
+    ci.textContent = BLOCKS[G.selected].icon;
+    e.currentTarget.appendChild(ci);
+  }
+}
+
+function onCellLeave(e) {
+  e.currentTarget.classList.remove('prev', 'prev-no');
+  const r = +e.currentTarget.dataset.r;
+  const c = +e.currentTarget.dataset.c;
+  refreshCell(r, c);
+}
+
+// ─── PLACE / ERASE ───────────────────────────────────────
+function placeAt(r, c) {
+  if (!G.selected)       { toast('select a block first'); return; }
+  if (G.grid[r][c])      { toast('cell already occupied'); return; }
+  if (!canAfford(G.selected)) { toast('not enough resources'); return; }
+
+  const k = G.selected;
+  Object.entries(BLOCKS[k].cost).forEach(([res, n]) => { G.res[res] -= n; });
+  G.grid[r][c] = k;
+  G.score += BLOCKS[k].score;
+  refreshCell(r, c);
+
+  const el = getCell(r, c);
+  el.classList.add('popping');
+  setTimeout(() => el.classList.remove('popping'), 250);
+
+  if (!canAfford(k)) { G.selected = null; }
+  renderRes();
+  renderBlocks();
+  updateStats();
+}
+
+function eraseAt(r, c) {
+  if (!G.grid[r][c]) return;
+  const k = G.grid[r][c];
+  Object.entries(BLOCKS[k].cost).forEach(([res, n]) => { G.res[res] += Math.floor(n * 0.5); });
+  G.score = Math.max(0, G.score - BLOCKS[k].score);
+  G.grid[r][c] = null;
+  refreshCell(r, c);
+  renderRes();
+  renderBlocks();
+  updateStats();
+  toast('removed — 50% refunded');
+}
+
+function clearAll() {
+  if (!confirm('clear all placed blocks?')) return;
+  for (let r = 0; r < G.H; r++) {
+    for (let c = 0; c < G.W; c++) {
+      if (G.grid[r][c]) {
+        const k = G.grid[r][c];
+        Object.entries(BLOCKS[k].cost).forEach(([res, n]) => { G.res[res] += Math.floor(n * 0.5); });
+        G.grid[r][c] = null;
+      }
+    }
+  }
+  G.score = 0;
+  for (let r = 0; r < G.H; r++) for (let c = 0; c < G.W; c++) refreshCell(r, c);
+  renderRes(); renderBlocks(); updateStats(); toast('cleared');
+}
+
+// ─── ERASE MODE ──────────────────────────────────────────
+function toggleErase() {
+  G.erasing = !G.erasing;
+  G.selected = null;
+  const btn = document.getElementById('eraseBtn');
+  if (G.erasing) {
+    btn.classList.add('active');
+    btn.textContent = 'erase ✕';
+  } else {
+    btn.classList.remove('active');
+    btn.textContent = 'erase';
+  }
+  renderBlocks();
+}
+
+// ─── SELECT BLOCK ────────────────────────────────────────
+function selectBlock(k) {
+  if (!canAfford(k)) return;
+  G.selected = k;
+  G.erasing  = false;
+  document.getElementById('eraseBtn').classList.remove('active');
+  document.getElementById('eraseBtn').textContent = 'erase';
+  renderBlocks();
+}
+
+// ─── RENDER RESOURCES ────────────────────────────────────
+function renderRes() {
+  const el = document.getElementById('resList');
+  el.innerHTML = '';
+  Object.entries(G.res).forEach(([k, v]) => {
+    const pct = Math.round(v / G.maxRes[k] * 100);
+    const cls = v === 0 ? 'empty' : v / G.maxRes[k] < 0.2 ? 'low' : '';
+
+    const row = document.createElement('div');
+    row.className = 'res-row';
+    row.innerHTML =
+      '<span class="res-name">' + k + '</span>' +
+      '<span class="res-val ' + cls + '">' + v + '</span>';
+    el.appendChild(row);
+
+    const track = document.createElement('div'); track.className = 'res-track';
+    const fill  = document.createElement('div'); fill.className = 'res-fill';
+    fill.style.width = pct + '%';
+    track.appendChild(fill);
+    el.appendChild(track);
+  });
+}
+
+// ─── RENDER BLOCKS ───────────────────────────────────────
+function renderBlocks() {
+  const el = document.getElementById('blockList');
+  el.innerHTML = '';
+  Object.entries(BLOCKS).forEach(([k, b]) => {
+    const affordable = canAfford(k);
+    const selected   = G.selected === k;
+    const costStr    = Object.entries(b.cost).map(([r, n]) => n + ' ' + r).join('\n');
+
+    const row = document.createElement('div');
+    row.className = 'block-row' + (selected ? ' sel' : '') + (affordable ? '' : ' dim');
+
+    row.innerHTML =
+      '<span class="b-icon">' + b.icon + '</span>' +
+      '<span class="b-name">' + b.name + '</span>' +
+      '<span class="b-cost">' + costStr + '</span>';
+
+    if (affordable) {
+      row.addEventListener('click', function() { selectBlock(k); });
+    }
+
+    el.appendChild(row);
+  });
+}
+
+// ─── RENDER OBJECTIVES ───────────────────────────────────
+function renderObjs() {
+  const el = document.getElementById('objList');
+  el.innerHTML = '';
+  G.objectives.forEach(function(o) {
+    const done = o.check();
+    const row = document.createElement('div');
+    row.className = 'obj-row';
+    row.innerHTML =
+      '<div class="obj-box' + (done ? ' done' : '') + '"></div>' +
+      '<span class="obj-txt' + (done ? ' done' : '') + '">' + o.text + '</span>';
+    el.appendChild(row);
+  });
+}
+
+// ─── UPDATE STATS ────────────────────────────────────────
+function updateStats() {
+  const filledN = flat().filter(Boolean).length;
+  const total   = G.W * G.H;
+  const pct     = Math.round(filledN / total * 100);
+
+  document.getElementById('hudPlaced').textContent = filledN;
+  document.getElementById('hudFill').textContent   = pct + '%';
+  document.getElementById('hudScore').textContent  = G.score;
+  document.getElementById('sFilled').textContent   = filledN;
+  document.getElementById('sEmpty').textContent    = total - filledN;
+  document.getElementById('sUnique').textContent   = uniqueCount();
+  document.getElementById('sBScore').textContent   = G.score;
+
+  renderObjs();
+}
+
+// ─── FINISH ──────────────────────────────────────────────
+function finishBuilding() {
+  const doneCount = G.objectives.filter(function(o) { return o.check(); }).length;
+  const bonus     = doneCount * 50;
+  const total     = G.score + bonus;
+  const pct       = fillPct();
+  const filledN   = flat().filter(Boolean).length;
+
+  document.getElementById('rScore').textContent = total;
+  document.getElementById('rRows').innerHTML =
+    '<div class="r-row"><span class="k">plot filled</span><span>' + pct + '%</span></div>' +
+    '<div class="r-row"><span class="k">cells placed</span><span>' + filledN + ' / ' + (G.W * G.H) + '</span></div>' +
+    '<div class="r-row"><span class="k">block score</span><span>' + G.score + '</span></div>' +
+    '<div class="r-row"><span class="k">objectives</span><span>' + doneCount + ' / ' + G.objectives.length + '</span></div>' +
+    '<div class="r-row"><span class="k">obj. bonus</span><span>+' + bonus + '</span></div>';
+
+  document.getElementById('screen-result').classList.add('show');
+}
+
+// ─── TOAST ───────────────────────────────────────────────
+var toastTimer;
+function toast(msg) {
+  var old = document.querySelector('.toast');
+  if (old) old.remove();
+  clearTimeout(toastTimer);
+  var el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  toastTimer = setTimeout(function() { el.remove(); }, 2200);
+}
+</script>
+</body>
+</html>
